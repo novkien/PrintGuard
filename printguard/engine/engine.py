@@ -97,6 +97,8 @@ FINISHING_COMMANDS = frozenset(
         "monitor.remove",
         "print.remove",
         "settings.update",
+        "review.save_local",
+        "training.start",
         "plugin.install",
         "plugin.remove",
         "plugin.update",
@@ -167,6 +169,7 @@ class Engine:
         self.monitors: dict[str, dict[str, Any]] = {}
         self.history: dict[str, MonitorHistory] = {}
         self.reviews = ReviewLibrary(platform)
+        self.local_training: dict[str, Any] = {"mode": "store", "pending": 0, "state": "idle"}
         self.feedback_token: str | None = None
         self._sends: dict[str, asyncio.Task[None]] = {}
         self._send_requests: dict[str, list[Any]] = {}
@@ -227,6 +230,8 @@ class Engine:
             "history.get": self._cmd_history_get,
             "review.get": self._cmd_review_get,
             "review.send": self._cmd_review_send,
+            "review.save_local": self._cmd_review_save_local,
+            "training.start": self._cmd_training_start,
             "review.retry": self._cmd_review_retry,
             "review.dismiss": self._cmd_review_dismiss,
             "snapshot.get": self._cmd_snapshot_get,
@@ -521,6 +526,7 @@ class Engine:
             "printers": [p.public() for p in self.printers.values()],
             "prints": [p.public() for p in self.prints.values()],
             "reviews": self.reviews.public(),
+            "local_training": self.local_training,
             "feedback_hub": self.feedback_token.split(".")[0] if self.feedback_token else None,
             "startup_warnings": self.startup_warnings,
             "monitors": [
@@ -881,6 +887,12 @@ class Engine:
 
     async def _tick(self) -> float:
         self._ticks += 1
+        self.local_training = await self.platform.local_training_status()
+        if self.local_training.get("reload_required"):
+            await self._switch_runtime(self.settings)
+            self.local_training = await self.platform.local_training_status()
+        if await self.reviews.consume_local(set(self.local_training.get("completed_reviews", []))):
+            self.save()
         for camera in self.cameras.values():
             if camera.frame_source is None:
                 if self._ticks % REATTACH_EVERY_TICKS == 0:
@@ -1831,6 +1843,26 @@ class Engine:
             printer=feedback.printer_model(message.get("printer")),
         )
         self._start_send(review, message.get("req_id"))
+
+    async def _cmd_review_save_local(self, message: dict[str, Any]) -> None:
+        """Saves a human review locally without queuing an upstream upload."""
+        review = self.reviews.get(message["id"])
+        if review is None or review.ended is None or review.status == "queued":
+            raise ValueError("Choose a finished review that is not uploading")
+        available = {f["id"] for f in review.frames}
+        failures, removed = set(message.get("failures") or []), set(message.get("removed") or [])
+        if not failures <= available or not removed <= available:
+            raise ValueError("Review contains unknown frame IDs")
+        frames = [(await self.platform.files.read(frame_key(review.id, f["id"])),
+                   "failure" if f["id"] in failures else "good")
+                  for f in review.frames if f["id"] not in removed]
+        self.local_training = await self.platform.local_review_save(review.id, frames)
+        review.local_saved = True
+        self._reply({"event": "local_saved", "id": review.id, "count": len(frames), "req_id": message.get("req_id")})
+
+    async def _cmd_training_start(self, message: dict[str, Any]) -> None:
+        """Requests one serialized run for the saved local queue."""
+        self.local_training = await self.platform.local_training_start()
 
     async def _cmd_review_retry(self, message: dict[str, Any]) -> None:
         self._require_feedback_on()

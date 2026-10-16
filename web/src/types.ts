@@ -141,6 +141,7 @@ export interface ReviewFrame extends Omit<Snapshot, "action"> {
 }
 
 export interface ReviewSummary {
+  local_saved?: boolean;
   id: string;
   monitor_id: string;
   started: number;
@@ -397,6 +398,7 @@ export interface EngineState {
   printers: Printer[];
   prints: PrintFile[];
   reviews: ReviewSummary[];
+  local_training?: { mode: "auto" | "store"; pending: number; state: string; message?: string; benchmark_seconds?: number; active_version?: string };
   feedback_hub: string | null;
   startup_warnings?: string[];
   monitors: Monitor[];

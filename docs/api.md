@@ -151,7 +151,7 @@ unaffected.
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/state` | Full snapshot: cameras, printers, monitors, prints, print reviews, plugins, settings, stats, the update status and what the dashboard draws its forms from. `startup_warnings` lists what the hub found wrong at start, such as a GPU it skipped, a setting it reset or a record it dropped, each with its reason, and it is kept until the hub restarts. [Architecture](architecture.md#the-protocol) lists the fields and [the resource model](#the-resource-model) what is left out |
+| `GET` | `/state` | Full snapshot: cameras, printers, monitors, prints, print reviews, plugins, settings, stats, the update status and what the dashboard draws its forms from. This fork also exposes `local_training`: mode, pending image count, job state, message and active model version. `startup_warnings` lists what the hub found wrong at start, such as a GPU it skipped, a setting it reset or a record it dropped, each with its reason, and it is kept until the hub restarts. [Architecture](architecture.md#the-protocol) lists the fields and [the resource model](#the-resource-model) what is left out |
 | `GET` | `/monitors` | List monitors with camera, linked printer and latest alert |
 | `GET` | `/monitors/{id}` | One monitor |
 | `GET` | `/monitors/{id}/history` | Its [risk history](monitoring.md#risk-history): one-minute buckets, each with the seconds `watched` in it, the alert log, the snapshot index and summary stats. `watch_min` in the stats is the time the readings spanned in whole minutes, leaving out gaps of more than 30 seconds |

@@ -34,6 +34,7 @@ export function sending(review: ReviewSummary): boolean {
 }
 
 export function statusText(review: ReviewSummary): string {
+  if (review.local_saved) return "saved locally";
   if (review.status === "sent") return `sent ${framesLabel(review.sent)}`;
   if (sending(review)) return `sending ${review.sent} of ${review.chosen}`;
   if (review.status === "queued") return review.retry_at ? `queued, sends after ${clock(review.retry_at)}` : "queued";

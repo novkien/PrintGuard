@@ -36,6 +36,9 @@ Obico's Spaghetti Detective, the only other open model, over the same four unsee
 
 ![PrintGuard dashboard: three cameras at a glance, one print mid-failure and auto-paused](docs/assets/dashboard.png)
 
+This fork also supports [local review storage and CPU fine-tuning](docs/feedback.md#local-training-in-this-fork).
+The optional worker trains on saved human labels, validates each candidate and deletes consumed images.
+
 ## What it does
 
 | | |

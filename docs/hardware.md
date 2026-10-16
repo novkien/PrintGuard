@@ -34,6 +34,19 @@ camera's rate rather than falling behind. See
 > sustains. If capacity sits far above the sum of your cameras' rates, you have headroom
 > for more cameras.
 
+## Local CPU training
+
+This fork can run the [optional local training worker](deployment.md#local-training-worker)
+outside the monitoring container. It uses CPU-only PyTorch, one compute thread, low scheduling
+priority and a one-core service quota. The detector continues to use its existing runtime until
+a validated local bundle is loaded, when the hub selects ONNX for that bundle.
+
+On the deployed Pi, a disposable 20-image, ten-epoch timing run took 30.15 seconds including
+export and numerical validation. Synthetic benchmark labels cannot activate a model and this
+measurement says nothing about detection quality. The worker stops a training run at its
+20-minute budget and switches to store-only mode on error. Remote CPU or GPU training was
+not needed for this measured batch.
+
 ## Image variants
 
 Every release publishes three variants. All three carry the same engine and UI, and differ only

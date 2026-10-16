@@ -65,6 +65,7 @@ class Review:
     ended: float | None = None
     status: str = "running"
     submission: dict[str, Any] | None = None
+    local_saved: bool = False
     frames: list[dict[str, Any]] = field(default_factory=list)
 
     def of_kind(self, kind: str) -> list[dict[str, Any]]:
@@ -89,6 +90,7 @@ class Review:
             "alerts": len(self.of_kind("alert")),
             "chosen": len(submission.get("labels", {})),
             "sent": len(submission.get("sent", [])),
+            "local_saved": self.local_saved,
             "code": submission.get("code"),
             "retry_at": submission.get("retry_at"),
         }
@@ -347,6 +349,14 @@ class ReviewLibrary:
             self._reviews.pop(review.id)
         outcomes = await asyncio.gather(*(self._drop(review, list(review.frames)) for review in reviews), return_exceptions=True)
         _raise_first(outcomes)
+
+    async def consume_local(self, review_ids: set[str]) -> bool:
+        """Deletes native review pixels after their local training batch is consumed."""
+        consumed = [r for r in self._reviews.values() if r.id in review_ids and r.ended is not None]
+        for review in consumed:
+            await self._drop(review, list(review.frames))
+            self._reviews.pop(review.id, None)
+        return bool(consumed)
 
     def _running(self, monitor_id: str) -> Review | None:
         return next((review for review in self._reviews.values() if review.monitor_id == monitor_id and review.ended is None), None)

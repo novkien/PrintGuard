@@ -1,0 +1,6 @@
+FROM ghcr.io/oliverbravery/printguard:2.6.2@sha256:fa78683f6e49abcbc548918dd56c758f32c1be7a4c07cc713eed43339061731e
+ARG SOURCE_REVISION=local-development
+LABEL org.opencontainers.image.source="https://github.com/novkien/PrintGuard" \
+      org.opencontainers.image.revision="$SOURCE_REVISION"
+COPY printguard/ /app/printguard/
+COPY web/dist/ /app/static/

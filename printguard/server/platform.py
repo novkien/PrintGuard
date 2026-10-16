@@ -35,6 +35,7 @@ from ..engine.reports import scrub_url, url_secrets
 from .bambu_camera import open_bambu_jpeg_stream
 from .events import parse_json, require_finite
 from .inference import Inference
+from .local_training import LocalTrainingStore
 from .mediamtx import MediaMTX, pull_source
 from .plugins import WasmPluginRuntime
 from .public_network import PublicOnlyTransport, connect_to_public
@@ -749,7 +750,10 @@ class ServerPlatform:
         prepare_data_directory(data_dir)
         prepare_data_directory(data_dir / "prints")
         self.files = DiskFileStore(data_dir / "prints")
+        self.local_training = LocalTrainingStore(data_dir / "local-training")
         self._model_dir = model_dir
+        self._base_model_dir = model_dir
+        self._local_model_version: str | None = None
         self._inference: Inference | None = None
         self.workers = 1
         self.inference_device = "Initialising"
@@ -778,10 +782,33 @@ class ServerPlatform:
         The runtime it replaces is closed once every frame already sent to it
         has come back, including one a ``classify`` call made outside the scheduler.
         """
-        runtime = settings["inference_runtime"]
-        inference = await asyncio.to_thread(Inference, self._model_dir, runtime)
+        for _ in range(3):
+            pointer = await asyncio.to_thread(self.local_training.read_json, "active.json", {})
+            version = pointer.get("version")
+            try:
+                if version is not None and (not isinstance(version, str) or not re.fullmatch(r"model-[0-9]+", version)):
+                    raise ValueError("Invalid local model version")
+                model_dir = self.local_training.root.parent / "local-models" / version if version else self._base_model_dir
+                runtime = "onnx" if version else settings["inference_runtime"]
+
+                def load_bundle():
+                    assets = vision.assets_from_dicts(json.loads((model_dir / "metadata.json").read_text()), json.loads((model_dir / "prototypes.json").read_text())["prototypes"])
+                    return Inference(model_dir, runtime), assets
+
+                inference, new_assets = await asyncio.to_thread(load_bundle)
+                break
+            except Exception as exc:
+                if version is None:
+                    raise
+                logger.exception("Local model failed to load; reverting %s", version)
+                await asyncio.to_thread(self.local_training.reject_active, version, str(exc))
+        else:
+            raise ValueError("Could not load the active or rollback model")
         previous = self._inference
         self._inference = inference
+        self.assets = new_assets
+        self._model_dir = model_dir
+        self._local_model_version = version
         self.workers = inference.workers
         self.inference_device = inference.device
         if previous is not None:
@@ -805,6 +832,20 @@ class ServerPlatform:
         if self._inference is not None:
             self._inference.close()
 
+    async def local_review_save(self, review_id: str, frames: list[tuple[bytes, str]]) -> dict[str, Any]:
+        """Saves reviewed JPEGs with content-based deduplication."""
+        return await asyncio.to_thread(self.local_training.save, review_id, frames)
+
+    async def local_training_status(self) -> dict[str, Any]:
+        """Returns the local worker's current progress and queue size."""
+        status = await asyncio.to_thread(self.local_training.status)
+        status["reload_required"] = status.get("active_version") != self._local_model_version
+        return status
+
+    async def local_training_start(self) -> dict[str, Any]:
+        """Requests a worker run without starting another process in the hub."""
+        return await asyncio.to_thread(self.local_training.request)
+
     def take_notices(self) -> list[Notice]:
         """Hands over what the hub has had to work around since the last call."""
         notices, self._notices = self._notices, []
@@ -813,7 +854,10 @@ class ServerPlatform:
     async def infer(self, rgb: np.ndarray) -> dict[str, Any]:
         """Runs the model through the selected hardware provider."""
         tensor = await asyncio.to_thread(vision.preprocess, rgb, self.assets)
-        return vision.classify(await self._inference.run(tensor), self.assets)
+        # Local bundles retain the original preprocessing contract. Capture the
+        # encoder and prototypes together before run() yields to a model switch.
+        inference, assets = self._inference, self.assets
+        return vision.classify(await inference.run(tensor), assets)
 
     async def discover_cameras(self) -> list[dict[str, Any]]:
         """Lists the host's video devices and active MediaMTX paths as attachable sources.

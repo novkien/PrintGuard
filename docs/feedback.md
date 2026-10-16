@@ -54,7 +54,45 @@ isn't offered for review.
 **Not this print** takes it off your list of prints to review. Its frames stay on the hub, so
 you can still open it from **Prints** later.
 
-## What's sent
+## Local training in this fork
+
+Choose an outcome, correct each frame's label and press **Save locally and train**.
+That action writes only to this hub. **Send to author** remains a separate explicit upload.
+The header and review sheet show the worker mode, pending images and training result.
+In store-only mode the button reads **Save locally** and no automatic training runs.
+
+The CPU worker adapts the verified upstream ShuffleNet encoder's final block for ten epochs,
+with a small learning rate, a frozen teacher and matching class-prototype updates. It exports
+an ONNX model and checks that its output matches PyTorch before publishing a bundle.
+Activation requires at least three reviewed images of each class in the batch, with a held-out
+subset containing both classes. The candidate must not worsen held-out cross-entropy or either
+class's correct count. A one-class batch waits in the bounded queue for future reviews with
+the missing class; it is not trained or discarded prematurely.
+This small frame split is a local check, not evidence of accuracy on independent print jobs;
+nearby frames can be very similar. Review actual failures as well as false alarms.
+
+When validation passes, the hub drains inference and loads the encoder and its matching
+prototypes together. A failed load rolls back and switches to store-only mode. The base model
+and one prior trained bundle remain available. An unsuccessful candidate never replaces the
+active model. **Train saved images** explicitly requests a run of any pending queue in auto mode.
+
+| Local data | Retention |
+|---|---|
+| Pending JPEGs and labels | SHA-256 content deduplication; at most 500 images or 200 MB |
+| Processed JPEGs, including native copies in the review library | Deleted after processing, whether the candidate is accepted or rejected |
+| Failed or interrupted job | Images remain for retry inside the same queue limits; automatic mode stops on an error |
+| Duplicate receipts | At most 50,000 hashes and 2,000 review IDs; no pixels, labels remain in the hash ledger |
+| Model bundles | Current and previous trained model only; original bundled model is unchanged |
+| Timing and job reports | One current status and one benchmark report, overwritten in place |
+
+Writes and queue claims share a database lock; a worker lock prevents concurrent trainers.
+Restart recovers interrupted jobs and deletes orphan image files. A retry of a consumed hash
+within the receipt window cannot recreate its JPEG. Reviewed native frames disappear after
+processing, so they can no longer be reopened in history or sent upstream.
+
+See [deployment](deployment.md#local-training-worker) for installation and the CPU budget.
+
+## What's sent to the author
 
 - The frames you kept, with the label you gave each one.
 - Each frame's risk score, time and which of the three kinds above it is.

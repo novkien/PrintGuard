@@ -28,6 +28,22 @@ vendor's client library are the exception, covered under
 - [Repository layout](#repository-layout)
 - [The website](#the-website)
 
+## Local training extension
+
+The native dashboard sends `review.save_local` with the review ID, failure frame IDs and removed
+frame IDs. The engine checks a finished review, reads its kept JPEGs through `Platform.files`
+and calls `Platform.local_review_save`. `training.start` calls `Platform.local_training_start`.
+Neither command queues an upstream feedback request. They finish durable writes even if the
+issuing dashboard disconnects. Plugins receive no additional command permission.
+
+`server/local_training.py` owns the content-addressed image queue, SQLite claims, receipts and
+atomic worker documents. The optional `training/worker.py` process owns PyTorch, candidate
+validation and publication of complete model bundles under `local-models/`. It never controls
+a printer. `Platform.local_training_status` supplies the `local_training` state field; the engine
+polls it before normal ticks, consumes completed native reviews and uses the existing runtime
+switch to drain inference before loading matching model assets. Invalid bundles revert to the
+previous pointer, disable automatic training and leave a visible error.
+
 ## The shape of it
 
 ```mermaid

@@ -313,3 +313,15 @@ class Platform(Protocol):
     def save_state(self, state: dict[str, Any]) -> None:
         """Persists the engine state."""
         ...
+
+    async def local_review_save(self, review_id: str, frames: list[tuple[bytes, str]]) -> dict[str, Any]:
+        """Saves human-labeled review frames to the local training queue."""
+        ...
+
+    async def local_training_status(self) -> dict[str, Any]:
+        """Reads the local queue and worker status."""
+        ...
+
+    async def local_training_start(self) -> dict[str, Any]:
+        """Requests one local training run."""
+        ...

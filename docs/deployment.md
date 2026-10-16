@@ -24,6 +24,50 @@ your trusted network.
 - [Running the container as your own user](#running-the-container-as-your-own-user)
 - [Staying up to date](#staying-up-to-date)
 
+## Local training worker
+
+The fork's `Dockerfile.local` layers the changed hub and built dashboard onto the pinned v2.6.2
+image. Run `cd web && npm ci && npm run build`, then build from the repository root with
+`docker build -f Dockerfile.local -t printguard:local-training .`. Keep the existing data mount,
+loopback port binding and origin restrictions. Do not expose the worker on a network port.
+
+The example `deployment/printguard-training.service` uses `/home/pi/printguard`; adjust those
+paths for another host. Keep the clone in `source`, a separate Python virtual environment in
+`training-venv`, persistent `data/local-training` and `data/local-models` directories, and the
+original training assets in `training-base`:
+
+```sh
+python3 -m venv /home/pi/printguard/training-venv
+/home/pi/printguard/training-venv/bin/pip install -r printguard/training/requirements-cpu.txt
+```
+
+`training-base/base.pt` is the upstream [std-cnn checkpoint](https://github.com/oliverbravery/Edge-FDM-Fault-Detection/blob/d8be52a0de6eb55ffcfec317ce9d2d2110069a33/prototypical-network-training/results/std-cnn/best_model.pt),
+verified against SHA-256 `c5df7b534ec38e19914a0e6af3e23735a5734b3c051467a40cf8cd3f1a957817`.
+Copy this checkout's `models/metadata.json` and `models/prototypes.json` alongside it. Do not
+substitute a different checkpoint. The loader permits only the reviewed module types and uses
+tensor-only loading for later trained weights.
+
+Set `data/local-training/config.json` to `{"mode":"auto","benchmark_seconds":30.1532}` only
+after measuring this host. The service runs at low priority with `CPUQuota=100%` and a 1500 MB
+memory cap; only its queue and model directories are writable. Enable the supplied unit with
+`systemctl enable --now printguard-training` after installing it in `/etc/systemd/system/`.
+No monitoring, printer firmware or gateway restart is needed to start this worker.
+
+To benchmark, use a separate disposable queue with exactly 20 images and run:
+
+```sh
+PYTHONPATH=source training-venv/bin/python -m printguard.training.worker \
+  --root benchmark --base training-base --benchmark
+```
+
+Benchmark mode always refuses model activation. For an explicit retry, stop the worker service
+and use the same command with the real queue and `--once` instead of `--benchmark`, then start
+the service again. `active.json` names the current and previous bundle; removing its version
+selects the untouched original model on the next hub tick. Back up only those small bundles and
+configuration if needed, not consumed training images. The [retention limits](feedback.md#local-training-in-this-fork)
+apply independently of log rotation. Installing an upstream image replaces this fork's UI and
+protocol, so retain the local image tag to keep local training support.
+
 > [!CAUTION]
 > Never port-forward `8000`, `8554` or `1935` from the internet. Each option below keeps
 > full functionality, live video included, because video is plain HTTP over the same port.

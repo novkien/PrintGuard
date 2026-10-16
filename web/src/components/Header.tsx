@@ -147,6 +147,7 @@ export function Header() {
     <header className="sticky top-0 z-30 border-b border-line-0 bg-ink-0/90 backdrop-blur-sm">
       <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-6">
         <Wordmark />
+        {engine?.local_training && <span className="chip" title={engine.local_training.message}>Local training: {engine.local_training.mode === "auto" ? "auto" : "store"} · {engine.local_training.pending} queued · {engine.local_training.state}</span>}
         <span role="status">{reconnecting && <span className="chip chip-warn boot-cursor">reconnecting</span>}</span>
         <div className="hidden sm:contents">
           <VersionChip />
