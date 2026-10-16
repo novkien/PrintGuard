@@ -171,6 +171,19 @@ class FakePlatform:
         """Records the selected inference runtime."""
         self.inference_runtime = settings["inference_runtime"]
 
+    async def local_review_save(self, review_id: str, frames: list[tuple[bytes, str]]) -> dict[str, Any]:
+        """Records a local queue submission for engine tests."""
+        self.local_saved = (review_id, frames)
+        return {"mode": "store", "pending": len(frames), "state": "idle"}
+
+    async def local_training_status(self) -> dict[str, Any]:
+        """Returns a local-only queue fixture."""
+        return {"mode": "store", "pending": 0, "state": "idle"}
+
+    async def local_training_start(self) -> dict[str, Any]:
+        """Records a training request without running a model."""
+        return {"mode": "store", "pending": 0, "state": "requested"}
+
     def take_notices(self) -> list[Notice]:
         notices, self.notices = self.notices, []
         return notices

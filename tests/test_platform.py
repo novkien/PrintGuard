@@ -10,6 +10,7 @@ import gc
 import io
 import json
 import logging
+import shutil
 import socket
 import struct
 import subprocess
@@ -54,6 +55,82 @@ from printguard.server.platform import (
 
 V4L2_CAP_META_CAPTURE = 0x00800000
 V4L2_CAPABILITY_FILLED = "16s32s32sIII12x"
+
+
+async def test_invalid_trained_bundle_rolls_back_without_losing_inference(tmp_path: Path) -> None:
+    platform = ServerPlatform(Path("models"), tmp_path, "http://localhost:9997", "rtsp://localhost:8554")
+    try:
+        await platform.configure({"inference_runtime": "onnx"})
+        platform.local_training.write_json("config.json", {"mode": "auto"})
+        platform.local_training.write_json("active.json", {"version": "model-1", "previous": None})
+        await platform.configure({"inference_runtime": "onnx"})
+        result = await platform.infer(np.zeros((240, 320, 3), dtype=np.uint8))
+        assert result["prediction"] in ("success", "failure")
+        assert platform.local_training.status()["active_version"] is None
+        assert platform.local_training.status()["mode"] == "store"
+        assert not (await platform.local_training_status())["reload_required"]
+    finally:
+        await platform.close()
+
+
+async def test_valid_local_bundle_loads_matching_prototypes(tmp_path: Path) -> None:
+    platform = ServerPlatform(Path("models"), tmp_path, "http://localhost:9997", "rtsp://localhost:8554")
+    target = tmp_path / "local-models" / "model-2"
+    target.mkdir(parents=True)
+    for name in ("metadata.json", "prototypes.json", "encoder_float32.onnx"):
+        shutil.copy(Path("models") / name, target / name)
+    prototypes = json.loads((target / "prototypes.json").read_text())
+    prototypes["prototypes"]["success"][0] += 0.01
+    (target / "prototypes.json").write_text(json.dumps(prototypes))
+    platform.local_training.write_json("active.json", {"version": "model-2"})
+    try:
+        await platform.configure({"inference_runtime": "auto"})
+        assert platform._local_model_version == "model-2"
+        assert np.isclose(platform.assets.prototypes["success"][0], prototypes["prototypes"]["success"][0])
+        assert not (await platform.local_training_status())["reload_required"]
+        result = await platform.infer(np.zeros((240, 320, 3), dtype=np.uint8))
+        assert result["prediction"] in ("success", "failure")
+    finally:
+        await platform.close()
+
+
+async def test_inflight_frame_keeps_its_original_prototypes_during_bundle_reload(tmp_path: Path) -> None:
+    platform = ServerPlatform(Path("models"), tmp_path, "http://localhost:9997", "rtsp://localhost:8554")
+    target = tmp_path / "local-models" / "model-3"
+    target.mkdir(parents=True)
+    for name in ("metadata.json", "prototypes.json", "encoder_float32.onnx"):
+        shutil.copy(Path("models") / name, target / name)
+    prototypes = json.loads((target / "prototypes.json").read_text())
+    prototypes["prototypes"]["success"] = [1000.0] * 1024
+    (target / "prototypes.json").write_text(json.dumps(prototypes))
+    release = threading.Event()
+    try:
+        await platform.configure({"inference_runtime": "onnx"})
+        image = np.arange(240 * 320 * 3, dtype=np.uint8).reshape(240, 320, 3)
+        expected = await platform.infer(image)
+        entered = threading.Event()
+        original = platform._inference._selected.run
+
+        def held(tensor):
+            entered.set()
+            release.wait(20)
+            return original(tensor)
+
+        platform._inference._selected.run = held
+        classifying = asyncio.create_task(platform.infer(image))
+        await asyncio.to_thread(entered.wait, 10)
+        platform.local_training.write_json("active.json", {"version": "model-3"})
+        switching = asyncio.create_task(platform.configure({"inference_runtime": "onnx"}))
+        async with asyncio.timeout(15):
+            while platform._local_model_version != "model-3":
+                await asyncio.sleep(0.01)
+        release.set()
+        assert await classifying == expected
+        await switching
+        assert (await platform.infer(image))["prediction"] == "failure"
+    finally:
+        release.set()
+        await platform.close()
 
 
 @pytest.mark.parametrize("runtime", ["auto", "litert", "onnx"])

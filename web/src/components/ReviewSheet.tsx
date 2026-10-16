@@ -143,9 +143,9 @@ export function ReviewSheet({ review, monitor }: { review: ReviewSummary; monito
     setRelabelled(new Set());
   };
 
-  const submit = () =>
+  const submit = (local = true) =>
     send({
-      cmd: "review.send",
+      cmd: local ? "review.save_local" : "review.send",
       id: review.id,
       failures: kept.filter(showsFailure).map((frame) => frame.id),
       removed: [...removed],
@@ -159,7 +159,7 @@ export function ReviewSheet({ review, monitor }: { review: ReviewSummary; monito
       {(review.status === "ready" || review.status === "dismissed") && (
         <div className="space-y-4 px-5 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
           <p className="text-sm text-text-1">
-            PrintGuard kept {framesLabel(review.frames)} from this print. Label them and send them to me, and I'll use them to train the detection model.
+            Label these frames and save them on your own machine. Saving locally does not upload them to the author.
           </p>
           <div>
             <span id={outcomeLabelId} className="label mb-2 block">
@@ -210,7 +210,7 @@ export function ReviewSheet({ review, monitor }: { review: ReviewSummary; monito
                 onChange={(event) => setPrinter(event.target.value)}
               />
               <details className="text-[0.7rem] text-text-2">
-                <summary className="cursor-pointer pointer-coarse:py-3.5 hover:text-text-1">What's sent</summary>
+                <summary className="cursor-pointer pointer-coarse:py-3.5 hover:text-text-1">What Send to author uploads</summary>
                 <p className="mt-1.5 leading-relaxed">
                   The frames shown here with the labels you gave them, each frame's risk score, time and whether it was an
                   alert, a near miss or an ordinary frame, a random ID for the print and for each frame, this monitor's alert
@@ -222,16 +222,24 @@ export function ReviewSheet({ review, monitor }: { review: ReviewSummary; monito
               </details>
             </>
           )}
-          {switchedOff && <p className="text-[0.7rem] leading-relaxed text-text-2">The end-of-print review is switched off in Settings, so nothing can be sent.</p>}
+          <p className="text-[0.7rem] text-text-2">
+            Local training: {engine?.local_training?.mode === "auto" ? "automatic after saving" : "store now, train on request"}.
+            {" "}{engine?.local_training?.pending ?? 0} unique images pending.
+            {" "}{engine?.local_training?.message ?? "CPU benchmark pending"}
+          </p>
           <div className="flex gap-2">
             {review.status === "ready" && (
               <button className="btn flex-1" onClick={() => (send({ cmd: "review.dismiss", id: review.id }), close())}>
                 Not this print
               </button>
             )}
-            <button className="btn btn-primary flex-1" disabled={switchedOff || !outcome || kept.length === 0 || isPending("review.send")} onClick={submit}>
-              Send {framesLabel(loaded ? kept.length : review.frames)}
+            <button className="btn btn-primary flex-1" disabled={!outcome || !loaded || kept.length === 0 || isPending("review.save_local")} onClick={() => submit()}>
+              {engine?.local_training?.mode === "auto" ? "Save locally and train" : "Save locally"}
             </button>
+          </div>
+          <div className="flex gap-2">
+            {engine?.local_training?.mode === "auto" && <button className="btn flex-1" disabled={!engine.local_training.pending || isPending("training.start")} onClick={() => send({ cmd: "training.start" })}>Train saved images</button>}
+            <button className="btn flex-1" disabled={switchedOff || !outcome || !loaded || kept.length === 0 || isPending("review.send")} onClick={() => submit(false)}>Send to author</button>
           </div>
         </div>
       )}

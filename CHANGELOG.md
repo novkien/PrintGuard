@@ -7,6 +7,12 @@ release notes.
 The format is [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased local fork]
+
+### Added
+
+- I can label and save review images locally, with an optional CPU worker that fine-tunes, validates and activates model bundles. Queue images are deduplicated and deleted after processing; failed validation keeps the existing model. The dashboard shows training progress and keeps upstream sending as a separate action.
+
 ## [2.6.2] - 2026-10-10
 
 ### Fixed

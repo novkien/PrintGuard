@@ -661,6 +661,10 @@ export const useStore = create<PgStore>((set, get) => {
         clearPending(event.req_id);
         set((s) => ({ reviewData: { ...s.reviewData, [event.id]: event } }));
         break;
+      case "local_saved":
+        clearPending(event.req_id);
+        set({ reviewId: null });
+        break;
       case "review_sent":
         clearPending(event.req_id);
         break;

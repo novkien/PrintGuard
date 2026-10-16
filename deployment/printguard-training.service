@@ -1,0 +1,26 @@
+[Unit]
+Description=PrintGuard local CPU fine-tuning worker
+After=network.target docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pi/printguard/source
+Environment=PYTHONPATH=/home/pi/printguard/source
+Environment=OMP_NUM_THREADS=1
+Environment=OPENBLAS_NUM_THREADS=1
+ExecStart=/home/pi/printguard/training-venv/bin/python -m printguard.training.worker --root /home/pi/printguard/data/local-training --base /home/pi/printguard/training-base
+Restart=on-failure
+RestartSec=15
+Nice=15
+CPUQuota=100%
+MemoryMax=1500M
+IOSchedulingClass=idle
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pi/printguard/data/local-training /home/pi/printguard/data/local-models
+PrivateTmp=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

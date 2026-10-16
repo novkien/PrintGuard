@@ -287,7 +287,7 @@ async function openCameraEditor(page: Page): Promise<void> {
 }
 
 const SCENES: Scene[] = [
-  { name: "review", width: 1360, height: 860, theme: "dark", mutate: (e) => void (e.reviews = [REVIEW]), prepare: openReview },
+  { name: "review", width: 1360, height: 1040, theme: "dark", mutate: (e) => { e.reviews = [REVIEW]; e.local_training = { mode: "auto", pending: 0, state: "idle", message: "Ready for reviewed images", benchmark_seconds: 30.15 }; }, prepare: openReview },
   { name: "history", width: 1360, height: 860, theme: "dark", mutate: (e) => void (e.reviews = PRINTS_KEPT), prepare: openHistory },
   { name: "camera-editor", width: 1360, height: 680, theme: "dark", dialog: "cameras", prepare: openCameraEditor },
   { name: "settings-advanced", width: 1360, height: 860, theme: "dark", settingsTab: "advanced" },

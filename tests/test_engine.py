@@ -6137,6 +6137,35 @@ _QUEUED_REVIEW = {
 _FAKE_TOKEN = {"id": "t1", "name": "t", "scope": "read", "hash": "0" * 64, "hint": "pg_abc…", "created": 1.0}
 
 
+async def test_local_review_labels_stay_local_and_consumed_native_pixels_are_removed(monkeypatch) -> None:
+    platform = FakePlatform()
+    async with running_engine(platform, camera_fps=[]) as (engine, events):
+        engine.reviews.restore([{**_FAKE_REVIEW, "status": "ready", "frames": [_FAKE_FRAME, {**_FAKE_FRAME, "id": "f2"}]}])
+        platform.files.blobs.update({"review-r1-f1.jpg": b"one", "review-r1-f2.jpg": b"two"})
+        response = await engine.request({"cmd": "review.save_local", "id": "r1", "failures": ["f2"]})
+        assert any(event["event"] == "local_saved" for event in response)
+        assert platform.local_saved == ("r1", [(b"one", "good"), (b"two", "failure")])
+        assert not [call for call in platform.http_calls if call[0] == "POST"]
+        assert engine.reviews.get("r1").local_saved
+
+        async def consumed():
+            return {"mode": "auto", "pending": 0, "state": "completed", "completed_reviews": ["r1"]}
+
+        monkeypatch.setattr(platform, "local_training_status", consumed)
+        await asyncio.sleep(1.2)
+        assert engine.reviews.get("r1") is None
+        assert not platform.files.blobs
+
+
+async def test_local_review_rejects_unknown_frame_without_saving() -> None:
+    platform = FakePlatform()
+    async with running_engine(platform, camera_fps=[]) as (engine, _):
+        engine.reviews.restore([{**_FAKE_REVIEW, "status": "ready", "frames": [_FAKE_FRAME]}])
+        with pytest.raises(RuntimeError, match="unknown frame"):
+            await engine.request({"cmd": "review.save_local", "id": "r1", "failures": ["not-a-frame"]})
+        assert not hasattr(platform, "local_saved")
+
+
 @pytest.mark.parametrize(
     "state",
     [

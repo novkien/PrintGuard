@@ -28,7 +28,7 @@ const DOCS: { title: string; page: string; body: string }[] = [
   { title: "API & MCP", page: "api.md", body: "Drive the hub from a script, an agent or Home Assistant." },
   { title: "Plugins", page: "plugins.md", body: "Install a plugin and see what it can reach." },
   { title: "Writing plugins", page: "plugin-development.md", body: "Write a plugin in plain JavaScript and publish it to the catalogue." },
-  { title: "Training frames", page: "feedback.md", body: "Label a print's frames and send them to help train the model." },
+  { title: "Training frames", page: "feedback.md", body: "Save labeled frames locally for optional CPU fine-tuning, or explicitly send them to the author." },
   { title: "Architecture", page: "architecture.md", body: "How the engine, the hub and the dashboard fit together." },
   { title: "Troubleshooting", page: "troubleshooting.md", body: "Fix a dead feed, a failing printer test or a port already in use." },
 ];
